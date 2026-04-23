@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>警察抓小偷 · 完整版 | 可更换密码 + 显示开关</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #eef2f7;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            padding: 8px;
+            overflow: hidden;
+        }
+        .game-container {
+            width: 100%;
+            max-width: 1300px;
+            height: 100%;
+            max-height: 98vh;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(8px);
+            border-radius: 24px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.12);
+            padding: 16px;
+            display: flex;
+            gap: 16px;
+            border: 6px solid #f8fafc;
+        }
+        .board-wrapper { flex: 1; position: relative; min-width: 0; }
+        .board-area {
+            width: 100%;
+            height: 100%;
+            background-color: #cbd5e1;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            border-radius: 20px;
+            padding: 6px;
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            gap: 4px;
+            aspect-ratio: 10 / 8;
+            box-shadow: inset 0 4px 12px rgba(0,0,0,0.08);
+            transition: background-image 0.3s;
+            position: relative;
+        }
+        .board-area::after { content: ''; position: absolute; inset: 0; background: rgba(255,255,255,0.05); pointer-events: none; border-radius: 20px; z-index: 1; }
+        .center-toast {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); color: white;
+            padding: 20px 32px; border-radius: 60px; font-size: 28px; font-weight: 900;
+            z-index: 200; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 2px solid rgba(255,215,0,0.5); display: none; align-items: center; justify-content: center;
+            white-space: nowrap; pointer-events: none;
+        }
+        .rule-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; z-index: 150; pointer-events: none; }
+        .rule-card { background: rgba(255,255,255,0.92); backdrop-filter: blur(12px); border-radius: 24px; padding: 20px 24px; max-width: 420px; width: 85%; box-shadow: 0 20px 35px rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.5); pointer-events: auto; display: none; }
+        .rule-card.show { display: block; }
+        .close-rule { position: absolute; top: 14px; right: 18px; background: none; border: none; font-size: 26px; cursor: pointer; color: #64748b; }
+        .cell { background: white; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; transition: all 0.3s; border-bottom: 3px solid #cbd5e1; z-index: 2; }
+        .cell-num { position: absolute; top: 2px; left: 2px; font-size: 10px; font-weight: 900; background: rgba(0,0,0,0.1); color: #1e293b; padding: 1px 4px; border-radius: 5px; }
+        .cell-content { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; padding-top: 4px; }
+        .cell-icon { font-size: 26px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15)); line-height: 1.2; }
+        .cell-label { font-size: 10px; font-weight: 800; color: #334155; margin-top: 2px; }
+        .cell-start { background: linear-gradient(145deg, #1e4bd2 0%, #0f2e8a 100%) !important; border-bottom-color: #0b1e5c !important; }
+        .cell-start .cell-label { color: #facc15; }
+        .cell-rocket { background: #fdf08a !important; border-bottom-color: #eab308 !important; }
+        .cell-bomb { background: #fecdd3 !important; border-bottom-color: #f43f5e !important; }
+        .cell-diamond { background: #a7f3d0 !important; border-bottom-color: #10b981 !important; }
+        .cell-chain { background: #c7d2fe !important; border-bottom-color: #6366f1 !important; }
+        .token { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 42px; height: 42px; z-index: 50; display: flex; align-items: center; justify-content: center; font-size: 34px; filter: drop-shadow(0 6px 10px rgba(0,0,0,0.3)); pointer-events: none; transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .bounce-animation { animation: float 2s infinite ease-in-out; }
+        @keyframes float { 0%,100% { transform: translate(-50%, -65%); } 50% { transform: translate(-50%, -45%); } }
+        .token-police.offset { transform: translate(-85%, -55%); }
+        .token-thief.offset { transform: translate(-15%, -55%); }
+        .scene { width: 70px; height: 70px; margin: 6px auto; perspective: 700px; }
+        .dice { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 2.5s; }
+        .dice-face { position: absolute; width: 70px; height: 70px; background: white; border: 1px solid #e2e8f0; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: bold; box-shadow: inset 0 0 10px rgba(0,0,0,0.05), 0 4px 6px rgba(0,0,0,0.1); }
+        .face-1 { transform: rotateY(0deg) translateZ(35px); color: #ef4444; }
+        .face-2 { transform: rotateY(90deg) translateZ(35px); }
+        .face-3 { transform: rotateX(90deg) translateZ(35px); }
+        .face-4 { transform: rotateX(-90deg) translateZ(35px); }
+        .face-5 { transform: rotateY(-90deg) translateZ(35px); }
+        .face-6 { transform: rotateY(180deg) translateZ(35px); }
+        .side-panel { width: 280px; display: flex; flex-direction: column; gap: 10px; }
+        .status-card { border-radius: 18px; padding: 12px; text-align: center; background: rgba(255,255,255,0.85); backdrop-filter: blur(4px); border: 1px solid #f1f5f9; box-shadow: 0 6px 12px -4px rgba(0,0,0,0.05); }
+        .modal { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); display: none; position: fixed; inset: 0; z-index: 1000; align-items: center; justify-content: center; }
+        .quiz-content-card { background: white; border-radius: 24px; padding: 24px; max-width: 550px; width: 90%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+        .quiz-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+        .quiz-option { padding: 10px; background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 14px; text-align: left; font-weight: 700; transition: all 0.2s; display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
+        .quiz-option.correct { background: #d1fae5; border-color: #10b981; }
+        .quiz-option.wrong { background: #fee2e2; border-color: #ef4444; }
+        .option-tag { width: 24px; height: 24px; background: #e2e8f0; color: #475569; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+        .win-overlay { display: none; position: fixed; inset: 0; z-index: 2000; background: radial-gradient(circle, rgba(30,58,138,0.95) 0%, rgba(0,0,0,1) 100%); flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center; padding: 16px; overflow-y: auto; }
+        .editor-card { background: white; border-radius: 20px; padding: 20px; max-width: 1200px; width: 90%; height: 80vh; display: flex; flex-direction: column; }
+        .table-container { flex: 1; overflow-y: auto; margin-bottom: 12px; border: 1px solid #e2e8f0; border-radius: 12px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th { background: #f8fafc; position: sticky; top: 0; padding: 8px; text-align: left; font-size: 11px; color: #64748b; border-bottom: 2px solid #e2e8f0; }
+        td { padding: 5px; border-bottom: 1px solid #f1f5f9; }
+        .q-input { width: 100%; padding: 5px 8px; border: 1px solid #e2e8f0; border-radius: 6px; outline: none; font-size: 11px; }
+        .timer-display { font-size: 20px; font-weight: 900; color: #1e293b; letter-spacing: 1px; }
+        .log-list { max-height: 220px; overflow-y: auto; background: rgba(255,255,255,0.1); border-radius: 14px; padding: 8px; margin-top: 12px; text-align: left; font-size: 11px; }
+        .log-header { display: flex; padding: 6px 8px; background: rgba(0,0,0,0.2); border-radius: 8px; margin-bottom: 6px; font-weight: 700; color: #e2e8f0; }
+        .log-item { display: flex; align-items: center; padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.15); }
+        .log-role { width: 40px; font-weight: bold; color: #facc15; }
+        .log-question { flex: 2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 6px; }
+        .bg-card { background: white; border-radius: 24px; padding: 24px; max-width: 460px; width: 90%; }
+        .bg-preview { width: 100%; height: 100px; border-radius: 14px; background-size: cover; background-position: center; border: 2px dashed #cbd5e1; margin: 8px 0; display: flex; align-items: center; justify-content: center; background-color: #f1f5f9; }
+        .top-btn { padding: 4px 10px; border-radius: 8px; font-size: 10px; font-weight: 800; cursor: pointer; transition: 0.2s; }
+        .import-textarea { width: 100%; height: 300px; font-family: monospace; font-size: 12px; padding: 12px; border-radius: 12px; border: 1px solid #cbd5e1; background: #f8fafc; resize: vertical; }
+        .password-modal-content { background: white; border-radius: 28px; padding: 28px; max-width: 400px; width: 90%; text-align: center; }
+        .password-input-wrapper { display: flex; align-items: center; gap: 8px; margin: 15px 0; border: 2px solid #e2e8f0; border-radius: 16px; padding: 0 8px; background: white; }
+        .password-input { width: 100%; padding: 14px 0; font-size: 20px; text-align: center; border: none; outline: none; letter-spacing: 6px; font-weight: bold; background: transparent; }
+        .toggle-eye { font-size: 24px; cursor: pointer; color: #64748b; user-select: none; }
+        .countdown-badge { background: #fbbf24; color: #1e293b; padding: 6px 14px; border-radius: 30px; font-weight: bold; display: inline-block; margin-bottom: 10px; }
+        .global-lock-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; z-index: 10000; }
+        .global-lock-card { background: white; border-radius: 32px; padding: 32px 28px; max-width: 420px; width: 85%; text-align: center; animation: fadeInScale 0.25s ease-out; }
+        .global-lock-card .lock-icon { font-size: 64px; margin-bottom: 12px; }
+        .global-lock-card h3 { font-size: 28px; font-weight: 900; color: #dc2626; margin-bottom: 12px; }
+        .global-lock-card p { font-size: 16px; color: #334155; margin-bottom: 28px; }
+        .global-lock-card button { background: #3b82f6; border: none; padding: 12px 28px; border-radius: 40px; font-weight: bold; font-size: 16px; color: white; cursor: pointer; }
+        @keyframes fadeInScale { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+        #pdf-export-section { position: absolute; left: -9999px; top: 0; width: 1100px; background: white; color: black; padding: 30px; }
+        .pdf-table { width: 100%; border-collapse: collapse; border: 1px solid #333; }
+        .pdf-table th, .pdf-table td { border: 1px solid #555; padding: 8px; }
+    </style>
+</head>
+<body>
+
+<!-- 密码验证模态框 -->
+<div id="password-modal" class="modal" style="z-index:3000;">
+    <div class="password-modal-content">
+        <h3 class="text-2xl font-black text-gray-800 mb-2">🔐 验证密码</h3>
+        <p class="text-sm text-gray-500 mb-2">输入密码以访问题库/背景</p>
+        <div id="pwd-error-msg" class="text-red-500 text-sm font-bold mb-2"></div>
+        <div class="text-xs text-gray-400 mb-2">剩余尝试次数: <span id="attempt-left">5</span></div>
+        <div class="password-input-wrapper">
+            <input type="password" id="password-input" class="password-input" placeholder="****" maxlength="8" inputmode="numeric">
+            <span class="toggle-eye" onclick="togglePasswordVisibility('password-input', this)">👁️</span>
+        </div>
+        <div id="wait-timer" class="countdown-badge hidden">⏳ 等待 <span id="wait-seconds">5</span> 秒</div>
+        <div class="flex gap-3 mt-4">
+            <button id="pwd-confirm-btn" class="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-black">确认</button>
+            <button id="pwd-cancel-btn" class="flex-1 bg-gray-200 text-gray-700 py-3 rounded-xl font-bold">取消</button>
+        </div>
+    </div>
+</div>
+
+<!-- 更换密码模态框 -->
+<div id="change-pwd-modal" class="modal" style="z-index:3100;">
+    <div class="password-modal-content">
+        <h3 class="text-2xl font-black text-gray-800 mb-2">🔑 更换密码</h3>
+        <div id="change-pwd-error" class="text-red-500 text-sm font-bold mb-2"></div>
+        <div class="text-xs text-gray-400 mb-2">剩余尝试次数: <span id="change-left">5</span></div>
+        <div class="password-input-wrapper">
+            <input type="password" id="old-pwd-input" class="password-input" placeholder="当前密码" maxlength="8">
+            <span class="toggle-eye" onclick="togglePasswordVisibility('old-pwd-input', this)">👁️</span>
+        </div>
+        <div class="password-input-wrapper">
+            <input type="password" id="new-pwd-input" class="password-input" placeholder="新密码 (4~8位)" maxlength="8">
+            <span class="toggle-eye" onclick="togglePasswordVisibility('new-pwd-input', this)">👁️</span>
+        </div>
+        <div class="password-input-wrapper">
+            <input type="password" id="confirm-pwd-input" class="password-input" placeholder="确认新密码" maxlength="8">
+            <span class="toggle-eye" onclick="togglePasswordVisibility('confirm-pwd-input', this)">👁️</span>
+        </div>
+        <div id="change-wait-timer" class="countdown-badge hidden">⏳ 等待 <span id="change-wait-sec">5</span> 秒</div>
+        <div class="flex gap-3 mt-4">
+            <button id="change-pwd-confirm" class="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-black">确认更换</button>
+            <button id="change-pwd-cancel" class="flex-1 bg-gray-200 text-gray-700 py-3 rounded-xl font-bold">取消</button>
+        </div>
+    </div>
+</div>
+
+<div class="game-container">
+    <div class="flex flex-col gap-1 flex-1">
+        <div class="flex justify-between items-end px-1">
+            <h1 class="text-lg font-black">警察抓小偷<span class="text-indigo-600">PRO</span></h1>
+            <div class="flex gap-1">
+                <button onclick="toggleRules()" class="top-btn bg-amber-100 text-amber-700">📖 规则</button>
+                <button id="bg-btn" onclick="requestBgAccess()" class="top-btn bg-emerald-100 text-emerald-700">🖼️ 背景</button>
+                <button id="editor-btn" onclick="requestEditorAccess()" class="top-btn bg-indigo-600 text-white">⚙️ 题库</button>
+                <button id="change-pwd-btn" class="top-btn bg-purple-600 text-white hover:bg-purple-700">🔑 换密码</button>
+                <button onclick="resetGame()" class="top-btn bg-slate-100 text-slate-500">🔄 重置</button>
+                <button onclick="downloadGame()" class="top-btn bg-green-500 text-white">💾 保存</button>
+            </div>
+        </div>
+        <div class="board-wrapper" style="flex:1; min-height:0;">
+            <div id="board" class="board-area"></div>
+            <div id="center-toast" class="center-toast"></div>
+            <div id="rule-overlay" class="rule-overlay" onclick="if(event.target===this) toggleRules()"><div class="rule-card"><button class="close-rule" onclick="toggleRules()">×</button><h3>📖 游戏规则</h3><div class="rule-item">🎯 警察总步数≥小偷即获胜，棋盘循环(0~31)。</div><div class="rule-item">🎲 掷骰子→答题，答对前进，答错换边。</div><div class="rule-item">✨ 特殊格:🚀+3 💣-2 ⛓️禁锢 💎再掷</div><div class="rule-item">📊 胜利后必须下载PDF才能继续。</div></div></div>
+        </div>
+    </div>
+    <div class="side-panel">
+        <div class="status-card border-b-[3px] border-blue-500" id="turn-card"><p class="text-[7px]">当前回合</p><h2 id="current-player-name" class="text-xl font-black text-blue-600">警察行动</h2></div>
+        <div class="status-card"><p class="text-[7px]">⏱️ 用时</p><div id="timer-display" class="timer-display">00:00</div></div>
+        <div class="status-card"><div class="scene"><div id="dice" class="dice"><div class="dice-face face-1">1</div><div class="dice-face face-2">2</div><div class="dice-face face-3">3</div><div class="dice-face face-4">4</div><div class="dice-face face-5">5</div><div class="dice-face face-6">6</div></div></div><button id="roll-btn" class="w-full bg-indigo-600 text-white font-black py-2 rounded-xl">掷骰子</button><div id="dice-result-val" class="mt-1 text-xs italic">等待投掷...</div></div>
+        <div class="grid grid-cols-2 gap-2"><div class="status-card bg-blue-50"><p class="text-[7px]">警察</p><p id="p-score" class="text-xl font-black text-blue-700">0</p></div><div class="status-card bg-rose-50"><p class="text-[7px]">小偷</p><p id="t-score" class="text-xl font-black text-rose-700">16</p></div></div>
+        <div class="status-card grid grid-cols-2 gap-2"><div class="bg-green-50 rounded-xl p-1"><p class="text-[7px]">✅答对</p><p id="correct-count" class="text-lg font-black text-green-700">0</p></div><div class="bg-red-50 rounded-xl p-1"><p class="text-[7px]">❌答错</p><p id="wrong-count" class="text-lg font-black text-red-700">0</p></div></div>
+        <div id="msg-box" class="bg-slate-50 p-2 rounded-xl text-xs text-center italic">✨ 点击骰子开始游戏</div>
+    </div>
+</div>
+
+<div id="quiz-modal" class="modal" style="display: none;"><div class="quiz-content-card"><h3 id="quiz-q" class="text-lg font-black mb-3">...</h3><div id="quiz-options" class="quiz-grid"></div></div></div>
+<div id="bg-modal" class="modal"><div class="bg-card"><h3 class="text-xl font-black">🖼️ 棋盘背景</h3><div><input type="file" id="bg-upload" accept="image/*" class="w-full text-sm border rounded p-1 mt-2"></div><div><input type="text" id="bg-url" placeholder="图片URL" class="w-full border rounded p-1 mt-2"></div><div id="bg-preview" class="bg-preview mt-2">预览区域</div><div class="flex gap-2 mt-3"><button id="apply-bg-btn" class="bg-indigo-600 text-white py-1 rounded">应用</button><button id="reset-bg-btn" class="bg-slate-200 py-1 rounded">清除</button></div><button onclick="closeBgSettings()" class="w-full bg-slate-100 mt-3 py-1 rounded">关闭</button></div></div>
+<div id="editor-modal" class="modal"><div class="editor-card"><div class="flex justify-between"><h3 class="font-black">题库管理 (格子1~31)</h3><button onclick="openImportModal()" class="bg-amber-100 px-2 py-1 rounded text-sm">📋 批量导入</button></div><div class="table-container mt-2"><table id="questions-table"><thead><tr><th>ID</th><th>题目</th><th>A</th><th>B</th><th>C</th><th>D</th><th>正确答案</th></tr></thead><tbody id="table-body"></tbody></table></div><div class="flex gap-2 mt-2"><button onclick="saveFromTable()" class="bg-indigo-600 text-white py-1 px-4 rounded">保存题库</button><button onclick="closeEditor()" class="bg-gray-200 py-1 px-4 rounded">取消</button></div></div></div>
+<div id="import-modal" class="modal"><div class="bg-white rounded-2xl p-6 max-w-3xl w-full max-h-[85vh] overflow-auto"><h3 class="font-black">批量导入</h3><textarea id="import-textarea" class="import-textarea" placeholder="1. 题目内容&#10;A. 选项1&#10;B. 选项2&#10;C. 选项3&#10;D. 选项4&#10;答案：C"></textarea><div class="flex gap-2 mt-4"><button onclick="parseAndImport()" class="bg-indigo-600 text-white py-2 px-4 rounded">解析导入</button><button onclick="closeImportModal()" class="bg-gray-200 py-2 px-4 rounded">取消</button></div></div></div>
+
+<div id="win-overlay" class="win-overlay"><div class="text-[70px]" id="win-emoji">👮</div><h2 id="win-text" class="text-3xl font-black">警察胜利！</h2><div id="win-stats" class="mb-2"></div><div id="pdf-export-section"><div class="pdf-title">答题记录</div><div id="pdf-stats-text"></div><table class="pdf-table" id="pdf-table"><thead><tr><th>角色</th><th>题目</th><th>你的选择</th><th>正确答案</th><th>结果</th></tr></thead><tbody id="pdf-table-body"></tbody></table><div>生成时间: <span id="pdf-time"></span></div></div><div class="w-full max-w-3xl bg-black/30 rounded-xl p-3"><div class="log-header"><span class="log-role">角色</span><span class="log-question">题目</span><span class="log-selected">选择</span><span class="log-correct">答案</span><span class="log-result">结果</span></div><div id="log-container" class="log-list"></div></div><div class="flex gap-3 mt-4"><button id="download-pdf-btn" class="bg-green-500 text-white px-6 py-2 rounded-full font-black">📥 下载PDF</button><button id="play-again-btn" class="bg-white text-indigo-900 px-6 py-2 rounded-full font-black opacity-50 cursor-not-allowed" disabled="">🔒 先下载PDF</button><button id="close-win-btn" class="bg-gray-300 px-6 py-2 rounded-full opacity-50 cursor-not-allowed" disabled="">关闭</button></div><p class="text-xs mt-2">⚠️ 必须下载PDF后，才能重新开始或关闭</p></div>
+
+<script>
+(function(){
+    // ======================= 游戏常量与全局 =======================
+    const PATH_LEN = 32;
+    const pathIndices = [0,1,2,3,4,5,6,7,8,9,19,29,39,49,59,69,79,78,77,76,75,74,73,72,71,70,60,50,40,30,20,10];
+    const specialCells = {4:{type:'rocket',label:'前进3',icon:'🚀',action:3},8:{type:'bomb',label:'后退2',icon:'💣',action:-2},12:{type:'chain',label:'禁锢',icon:'⛓️',action:'freeze'},16:{type:'diamond',label:'再掷',icon:'💎',action:'again'},20:{type:'rocket',label:'前进3',icon:'🚀',action:3},24:{type:'bomb',label:'后退2',icon:'💣',action:-2},28:{type:'chain',label:'禁锢',icon:'⛓️',action:'freeze'}};
+    const streetIcons = ["🌳","🏠","🏢","🏪","🚕","🚲","🚦","📮"];
+    
+    // 默认题库真实内容
+    let defaultQuestions = [{q:"", options:["","","",""], correct:""}];
+    const realPre = [
+        {q:"校工虎伯为什么发脾气？", options:["扫把坏了","百日菊被摘","爱丽丝捣乱","天气热"], correct:"百日菊被摘"},
+        {q:"形容虎伯发怒不正确的？", options:["脸色涨红","青筋暴起","大声吼叫","垂涎欲滴"], correct:"垂涎欲滴"},
+        {q:"爱丽丝邀请日蒙的原因？", options:["胆子大","像福尔摩斯","观察力敏锐","常被骂"], correct:"观察力敏锐"},
+        {q:"特工队第一周进展？", options:["捉到小偷","找回花","一无所获还丢花","发现宗翔"], correct:"一无所获还丢花"},
+        {q:"“泄气的皮球”说明？", options:["喜欢皮球","很累","失去信心","皮球坏了"], correct:"失去信心"},
+        {q:"特工队智囊团？", options:["爱丽丝","虎伯","日蒙奶奶","宗翔"], correct:"日蒙奶奶"},
+        {q:"白奶奶判断偷花贼刚来过？", options:["亲眼看到","花变多了","听到声音","新鲜脚印"], correct:"花变多了"},
+        {q:"泥迹延伸到哪里？", options:["校门口","科学园","石灰墙小洞","食堂"], correct:"石灰墙小洞"},
+        {q:"关键线索？", options:["菊花瓣","钱包","钥匙","猫毛"], correct:"菊花瓣"},
+        {q:"真正的偷花贼？", options:["老人家","猫儿","爱丽丝","虎伯"], correct:"猫儿"},
+        {q:"老人家拖鞋上有花瓣原因？", options:["自己采花","猫偷吃花他蹭到","踩到花","送花"], correct:"猫偷吃花他蹭到"},
+        {q:"故事结局？", options:["老人被抓","爱丽丝道歉","真相大白","花不再开"], correct:"真相大白"},
+        {q:"枝繁叶茂意思？", options:["枝叶干枯","枝叶茂盛","花朵漂亮","叶子掉光"], correct:"枝叶茂盛"},
+        {q:"正确读音？", options:["沾zhān糟zāo","敏mǐng锐yuì","黎lí综zhōng","瓣pàn踩cǎi"], correct:"沾zhān糟zāo"},
+        {q:"饥肠辘辘形容？", options:["肚子饿","烦躁","疲倦","快速"], correct:"肚子饿"},
+        {q:"目光炯炯描写？", options:["伤心","迷茫","明亮有神","愤怒"], correct:"明亮有神"},
+        {q:"摹声词？", options:["赞叹","他","啧啧啧","一旁"], correct:"啧啧啧"},
+        {q:"毛遂自荐意思？", options:["推荐别人","自己推荐","强迫","偷做"], correct:"自己推荐"},
+        {q:"鞋____", options:["迹","绩","积","基"], correct:"迹"},
+        {q:"路面不平整？", options:["错综复杂","凹凸不平","四通八达","寻寻觅觅"], correct:"凹凸不平"},
+        {q:"省略号“嗯……”表示？", options:["话未说完","声音延长","思考","解释"], correct:"思考"},
+        {q:"“留下……”省略号作用？", options:["静默","话未说完","列举省略","重复"], correct:"话未说完"},
+        {q:"数字成语？", options:["蛛丝马迹","寻寻觅觅","千军万马","垂涎欲滴"], correct:"千军万马"},
+        {q:"万众一心“万”意思？", options:["一万","极多","一个","结束"], correct:"极多"},
+        {q:"百口莫辩适用？", options:["很多嘴","怎么解释也没人信","有口才","美食"], correct:"怎么解释也没人信"},
+        {q:"脸色一沉心情？", options:["高兴","惊讶","严肃不悦","害怕"], correct:"严肃不悦"},
+        {q:"释怀一笑意思？", options:["更生气","放下疙瘩轻松","怀疑","大笑"], correct:"放下疙瘩轻松"},
+        {q:"雨后好时机原因？", options:["空气好","泥地软易留痕迹","小偷不出门","花开美"], correct:"泥地软易留痕迹"},
+        {q:"鞋印说明？", options:["宗翔是贼","凡走过必留痕迹","弄脏走廊","鞋子大"], correct:"凡走过必留痕迹"},
+        {q:"爱丽丝性格？", options:["贪玩","热心正义","胆小","指责"], correct:"热心正义"},
+        {q:"福尔摩斯象征？", options:["英国人","戴帽子","智慧推理","年纪大"], correct:"智慧推理"}
+    ];
+    for(let i=1;i<=31 && i-1 < realPre.length; i++) defaultQuestions[i] = realPre[i-1];
+    let questions = JSON.parse(JSON.stringify(defaultQuestions));
+    
+    // 密码系统
+    let currentPassword = localStorage.getItem('gamePassword') || '0987';
+    let wrongAttempts = 0, changePwdWrongAttempts = 0;
+    let gameLocked = false;
+    let waitUntil = 0, changeWaitUntil = 0;
+    let pendingAction = null;
+    let passwordVerified = false;
+    
+    // 游戏状态
+    let pSteps = 0, tSteps = 16, turn = 'police', isMoving = false;
+    let frozenTurns = {police:0, thief:0};
+    let currentRotation = {x:0, y:0}, timerInterval = null, secondsElapsed = 0;
+    let correctCount = 0, wrongCount = 0, answerLog = [], pdfDownloaded = false;
+    let isGameEnded = false;   // 胜利锁定标志，防止关闭面板绕过下载
+
+    // DOM
+    const boardEl = document.getElementById('board');
+    const toastEl = document.getElementById('center-toast');
+    const policeToken = document.createElement('div'); policeToken.className = 'token token-police bounce-animation'; policeToken.innerHTML = '👮';
+    const thiefToken = document.createElement('div'); thiefToken.className = 'token token-thief bounce-animation'; thiefToken.innerHTML = '🥷';
+    
+    // 辅助函数
+    function getDisplayPos(steps) { return ((steps % PATH_LEN) + PATH_LEN) % PATH_LEN; }
+    function showCenterToast(msg,emoji='✨'){ toastEl.innerHTML=`${emoji} ${msg}`; toastEl.style.display='flex'; setTimeout(()=>toastEl.style.display='none',1200); }
+    function msg(t){ document.getElementById('msg-box').innerText=t; }
+    function updateStatsUI(){ document.getElementById('correct-count').innerText=correctCount; document.getElementById('wrong-count').innerText=wrongCount; }
+    function startTimer(){ if(timerInterval) clearInterval(timerInterval); secondsElapsed=0; updateTimerDisplay(); timerInterval=setInterval(()=>{ secondsElapsed++; updateTimerDisplay(); },1000); }
+    function stopTimer(){ if(timerInterval) clearInterval(timerInterval); timerInterval=null; }
+    function resetTimer(){ stopTimer(); secondsElapsed=0; updateTimerDisplay(); }
+    function updateTimerDisplay(){ let m=Math.floor(secondsElapsed/60).toString().padStart(2,'0'), s=(secondsElapsed%60).toString().padStart(2,'0'); document.getElementById('timer-display').innerText=`${m}:${s}`; }
+    function formatTime(sec){ let m=Math.floor(sec/60).toString().padStart(2,'0'), s=(sec%60).toString().padStart(2,'0'); return `${m}:${s}`; }
+    function addLog(question,selected,correctAnswer,isCorrect){ answerLog.push({ role: turn==='police'?'👮 警察':'🥷 小偷', question, selected, correctAnswer, isCorrect }); }
+    function renderLogToWinOverlay(){ let container=document.getElementById('log-container'); if(!answerLog.length){ container.innerHTML='<div class="text-center">暂无记录</div>'; return; } let html=''; answerLog.forEach(log=>{ html+=`<div class="log-item"><span class="log-role">${log.role}</span><span class="log-question">${log.question}</span><span class="log-selected">${log.selected}</span><span class="log-correct">${log.correctAnswer}</span><span class="log-result">${log.isCorrect?'✅':'❌'}</span></div>`; }); container.innerHTML=html; }
+    
+    function showGlobalLock() { if(document.querySelector('.global-lock-overlay')) return; const div = document.createElement('div'); div.className = 'global-lock-overlay'; div.innerHTML = `<div class="global-lock-card"><div class="lock-icon">🔒</div><h3>游戏已锁定</h3><p>密码错误次数过多，请刷新页面后重试</p><button id="globalLockOk">确定</button></div>`; document.body.appendChild(div); div.querySelector('#globalLockOk').onclick = () => div.remove(); }
+    function lockGamePermanently() { if(gameLocked) return; gameLocked = true; document.getElementById('roll-btn').disabled = true; showGlobalLock(); msg("游戏已锁定，请刷新页面"); }
+    function resetWrongAttempts() { wrongAttempts = 0; changePwdWrongAttempts = 0; updateAttemptDisplay(); updateChangeAttemptDisplay(); }
+    window.togglePasswordVisibility = function(inputId, eyeSpan) { const input = document.getElementById(inputId); if(input.type === 'password') { input.type = 'text'; eyeSpan.innerText = '🙈'; } else { input.type = 'password'; eyeSpan.innerText = '👁️'; } };
+    
+    // 密码弹窗逻辑
+    function updateAttemptDisplay(){ document.getElementById('attempt-left').innerText=Math.max(0,5-wrongAttempts); }
+    function updateChangeAttemptDisplay(){ document.getElementById('change-left').innerText=Math.max(0,5-changePwdWrongAttempts); }
+    function showPasswordModal(actionType){ if(gameLocked) return; if(passwordVerified){ if(actionType==='bg') showBgSettings(); else if(actionType==='editor') openEditor(); return; } pendingAction=actionType; document.getElementById('password-modal').style.display='flex'; document.getElementById('password-input').value=''; document.getElementById('pwd-error-msg').innerText=''; const now=Date.now(); if(now<waitUntil){ const rem=Math.ceil((waitUntil-now)/1000); startWaitCountdown(rem); } else document.getElementById('wait-timer').classList.add('hidden'); updateAttemptDisplay(); }
+    function startWaitCountdown(sec){ const waitDiv=document.getElementById('wait-timer'); waitDiv.classList.remove('hidden'); document.getElementById('password-input').disabled=true; document.getElementById('pwd-confirm-btn').disabled=true; let rem=sec; const timer=setInterval(()=>{ rem--; document.getElementById('wait-seconds').innerText=rem; if(rem<=0){ clearInterval(timer); waitDiv.classList.add('hidden'); if(!gameLocked){ document.getElementById('password-input').disabled=false; document.getElementById('pwd-confirm-btn').disabled=false; } } },1000); }
+    function handlePasswordSubmit(){ if(gameLocked) return; const now=Date.now(); if(now<waitUntil){ document.getElementById('pwd-error-msg').innerText=`请等待${Math.ceil((waitUntil-now)/1000)}秒`; return; } const entered=document.getElementById('password-input').value.trim(); if(entered===currentPassword){ passwordVerified=true; resetWrongAttempts(); document.getElementById('password-modal').style.display='none'; if(pendingAction==='bg') showBgSettings(); else if(pendingAction==='editor') openEditor(); pendingAction=null; msg("密码正确"); } else { wrongAttempts++; updateAttemptDisplay(); if(wrongAttempts>=5){ lockGamePermanently(); document.getElementById('password-modal').style.display='none'; return; } document.getElementById('pwd-error-msg').innerText=`密码错误！还剩${5-wrongAttempts}次机会`; waitUntil=Date.now()+5000; startWaitCountdown(5); } }
+    
+    function showChangePwdModal(){ if(gameLocked){ alert("游戏已锁定，无法更换密码"); return; } document.getElementById('change-pwd-modal').style.display='flex'; updateChangeAttemptDisplay(); document.getElementById('change-wait-timer').classList.add('hidden'); ['old-pwd-input','new-pwd-input','confirm-pwd-input'].forEach(id=>{ let inp=document.getElementById(id); if(inp) inp.type='password'; }); document.querySelectorAll('#change-pwd-modal .toggle-eye').forEach(eye=>eye.innerText='👁️'); }
+    function startChangeWaitCountdown(sec){ const waitDiv=document.getElementById('change-wait-timer'); waitDiv.classList.remove('hidden'); ['old-pwd-input','new-pwd-input','confirm-pwd-input','change-pwd-confirm'].forEach(id=>{ let el=document.getElementById(id); if(el) el.disabled=true; }); let rem=sec; const timer=setInterval(()=>{ rem--; document.getElementById('change-wait-sec').innerText=rem; if(rem<=0){ clearInterval(timer); waitDiv.classList.add('hidden'); if(!gameLocked){ ['old-pwd-input','new-pwd-input','confirm-pwd-input','change-pwd-confirm'].forEach(id=>{ let el=document.getElementById(id); if(el) el.disabled=false; }); } } },1000); }
+    function handleChangePassword(){ if(gameLocked){ alert("游戏已锁定"); closeChangePwdModal(); return; } const now=Date.now(); if(now<changeWaitUntil){ document.getElementById('change-pwd-error').innerText=`请等待${Math.ceil((changeWaitUntil-now)/1000)}秒`; return; } const oldPwd = document.getElementById('old-pwd-input').value.trim(), newPwd = document.getElementById('new-pwd-input').value.trim(), confirmPwd = document.getElementById('confirm-pwd-input').value.trim(); if(oldPwd !== currentPassword){ changePwdWrongAttempts++; updateChangeAttemptDisplay(); if(changePwdWrongAttempts>=5){ lockGamePermanently(); closeChangePwdModal(); return; } document.getElementById('change-pwd-error').innerText=`当前密码错误！还剩${5-changePwdWrongAttempts}次机会`; changeWaitUntil = Date.now()+5000; startChangeWaitCountdown(5); return; } if(newPwd.length < 4 || newPwd.length > 8){ document.getElementById('change-pwd-error').innerText='新密码长度需为4~8位'; return; } if(newPwd !== confirmPwd){ document.getElementById('change-pwd-error').innerText='两次输入的新密码不一致'; return; } currentPassword = newPwd; localStorage.setItem('gamePassword', currentPassword); passwordVerified = false; resetWrongAttempts(); msg("✅ 密码已更换"); closeChangePwdModal(); }
+    function closeChangePwdModal(){ document.getElementById('change-pwd-modal').style.display='none'; }
+    document.getElementById('change-pwd-btn').onclick = showChangePwdModal;
+    document.getElementById('change-pwd-confirm').onclick = handleChangePassword;
+    document.getElementById('change-pwd-cancel').onclick = closeChangePwdModal;
+    document.getElementById('pwd-confirm-btn').onclick = handlePasswordSubmit;
+    document.getElementById('pwd-cancel-btn').onclick = ()=>{ document.getElementById('password-modal').style.display='none'; pendingAction=null; };
+    document.getElementById('password-input').addEventListener('keypress',e=>{ if(e.key==='Enter') handlePasswordSubmit(); });
+    
+    // 棋盘渲染
+    function initBoard(){
+        boardEl.innerHTML='';
+        for(let i=0;i<80;i++){
+            const cell=document.createElement('div'); cell.id=`cell-container-${i}`; cell.className='cell';
+            const pathIdx=pathIndices.indexOf(i);
+            if(pathIdx!==-1){
+                cell.classList.add('cell-active');
+                const numSpan=document.createElement('span'); numSpan.className='cell-num'; numSpan.innerText=pathIdx; cell.appendChild(numSpan);
+                const contentDiv=document.createElement('div'); contentDiv.className='cell-content';
+                const iconDiv=document.createElement('div'); iconDiv.className='cell-icon';
+                const labelDiv=document.createElement('div'); labelDiv.className='cell-label';
+                if(pathIdx===0){ cell.classList.add('cell-start'); iconDiv.innerText='🚩'; labelDiv.innerText='起点'; }
+                else if(specialCells[pathIdx]){ const spec=specialCells[pathIdx]; cell.classList.add(`cell-${spec.type}`); iconDiv.innerText=spec.icon; labelDiv.innerText=spec.label; }
+                else{ iconDiv.innerText=streetIcons[pathIdx % streetIcons.length]; labelDiv.innerText='街道'; }
+                contentDiv.appendChild(iconDiv); contentDiv.appendChild(labelDiv); cell.appendChild(contentDiv);
+            } else cell.style.visibility='hidden';
+            boardEl.appendChild(cell);
+        }
+        syncPositions();
+    }
+    function syncPositions(){
+        const pDisplay=getDisplayPos(pSteps), tDisplay=getDisplayPos(tSteps);
+        const pRealIdx=pathIndices[pDisplay], tRealIdx=pathIndices[tDisplay];
+        const pCell=document.getElementById(`cell-container-${pRealIdx}`), tCell=document.getElementById(`cell-container-${tRealIdx}`);
+        if(pCell) pCell.appendChild(policeToken); if(tCell) tCell.appendChild(thiefToken);
+        if(pDisplay===tDisplay){ policeToken.classList.add('offset'); thiefToken.classList.add('offset'); } else { policeToken.classList.remove('offset'); thiefToken.classList.remove('offset'); }
+        document.getElementById('p-score').innerText=pDisplay; document.getElementById('t-score').innerText=tDisplay;
+    }
+    function changeTurn(){ turn=turn==='police'?'thief':'police'; const nameEl=document.getElementById('current-player-name'); nameEl.innerText=turn==='police'?'警察行动':'小偷行动'; nameEl.className=turn==='police'?"text-xl font-black text-blue-600":"text-xl font-black text-rose-600"; document.getElementById('turn-card').style.borderBottomColor=turn==='police'?'#3b82f6':'#f43f5e'; isMoving=false; document.getElementById('roll-btn').disabled=false; }
+    
+    async function moveStepByStep(s){
+        for(let i=1;i<=s;i++){
+            if(turn==='police') pSteps++; else tSteps++;
+            pSteps=Math.max(0,pSteps); tSteps=Math.max(0,tSteps);
+            syncPositions();
+            if(pSteps>=tSteps){ showWin(); return; }
+            await new Promise(r=>setTimeout(r,400));
+        }
+        await new Promise(r=>setTimeout(r,400));
+        const curDisplay=getDisplayPos(turn==='police'?pSteps:tSteps);
+        const spec=specialCells[curDisplay];
+        if(spec){
+            let toastMsg='';
+            if(spec.action==='freeze') toastMsg='禁锢！下一轮无法行动';
+            else if(spec.action==='again') toastMsg='再掷一次！';
+            else if(spec.action>0) toastMsg=`前进 ${spec.action} 格`;
+            else toastMsg=`后退 ${Math.abs(spec.action)} 步`;
+            showCenterToast(toastMsg,spec.icon); msg(`触发: ${spec.label}`);
+            await new Promise(r=>setTimeout(r,1200));
+            if(typeof spec.action==='number'){
+                for(let j=0;j<Math.abs(spec.action);j++){
+                    if(spec.action>0){ if(turn==='police') pSteps++; else tSteps++; }
+                    else{ if(turn==='police') pSteps=Math.max(0,pSteps-1); else tSteps=Math.max(0,tSteps-1); }
+                    syncPositions();
+                    if(pSteps>=tSteps){ showWin(); return; }
+                    await new Promise(r=>setTimeout(r,280));
+                }
+            } else if(spec.action==='freeze'){ frozenTurns[turn]=1; }
+            else if(spec.action==='again'){ isMoving=false; document.getElementById('roll-btn').disabled=false; return; }
+            syncPositions(); await new Promise(r=>setTimeout(r,300));
+        }
+        if(pSteps>=tSteps) showWin(); else changeTurn();
+    }
+    
+    async function showQuiz(steps){
+        const targetPos=getDisplayPos(turn==='police'?pSteps+steps:tSteps+steps);
+        if(targetPos===0 || !questions[targetPos] || !questions[targetPos].q || questions[targetPos].q.trim()===""){
+            await moveStepByStep(steps);
+            return;
+        }
+        const data=questions[targetPos];
+        const modal=document.getElementById('quiz-modal');
+        document.getElementById('quiz-q').innerText=data.q;
+        const optBox=document.getElementById('quiz-options'); optBox.innerHTML='';
+        let correctIndex=-1;
+        data.options.forEach((opt,i)=>{
+            const btn=document.createElement('div'); btn.className='quiz-option';
+            btn.innerHTML=`<div class="option-tag">${['A','B','C','D'][i]}</div><span>${opt}</span>`;
+            if(opt===data.correct) correctIndex=i;
+            btn.onclick=()=>{
+                optBox.querySelectorAll('.quiz-option').forEach(b=>b.style.pointerEvents='none');
+                const isCorrect=(opt===data.correct);
+                addLog(data.q,opt,data.correct,isCorrect);
+                if(isCorrect){ btn.classList.add('correct'); correctCount++; updateStatsUI(); msg("✅ 正确！"); setTimeout(()=>{ modal.style.display='none'; moveStepByStep(steps); },800); }
+                else{ btn.classList.add('wrong'); if(correctIndex!==-1) optBox.querySelectorAll('.quiz-option')[correctIndex].classList.add('correct'); wrongCount++; updateStatsUI(); msg(`❌ 错误，正确答案是 ${data.correct}`); setTimeout(()=>{ modal.style.display='none'; changeTurn(); },1800); }
+            };
+            optBox.appendChild(btn);
+        });
+        modal.style.display='flex';
+    }
+    
+    async function handleRoll(){
+        if(gameLocked){ msg("游戏已锁定，无法操作"); return; }
+        if(isMoving) return;
+        if(!timerInterval) startTimer();
+        if(frozenTurns[turn]>0){ msg(`${turn==='police'?'👮 警察':'🥷 小偷'} 被禁锢！`); frozenTurns[turn]--; await new Promise(r=>setTimeout(r,1500)); changeTurn(); return; }
+        isMoving=true; document.getElementById('roll-btn').disabled=true;
+        const result=Math.floor(Math.random()*6)+1;
+        const dice=document.getElementById('dice'), resultEl=document.getElementById('dice-result-val');
+        resultEl.innerText="投掷中...";
+        const faceAngles={1:{x:0,y:0},2:{x:0,y:-90},3:{x:-90,y:0},4:{x:90,y:0},5:{x:0,y:90},6:{x:0,y:180}};
+        const target=faceAngles[result];
+        currentRotation.x=Math.ceil(currentRotation.x/360)*360+1440+target.x;
+        currentRotation.y=Math.ceil(currentRotation.y/360)*360+1440+target.y;
+        dice.style.transform=`rotateX(${currentRotation.x}deg) rotateY(${currentRotation.y}deg)`;
+        await new Promise(r=>setTimeout(r,2400));
+        resultEl.innerHTML=`前进: ${result}`;
+        msg(`需前进 ${result} 步，请答题。`);
+        await new Promise(r=>setTimeout(r,500));
+        showQuiz(result);
+    }
+    
+    function showWin(){
+        if(isGameEnded) return;
+        stopTimer(); pdfDownloaded=false; isGameEnded=true;
+        document.getElementById('win-overlay').style.display='flex';
+        const policeCorrect=answerLog.filter(l=>l.role.includes('警察')&&l.isCorrect).length;
+        const policeWrong=answerLog.filter(l=>l.role.includes('警察')&&!l.isCorrect).length;
+        const thiefCorrect=answerLog.filter(l=>l.role.includes('小偷')&&l.isCorrect).length;
+        const thiefWrong=answerLog.filter(l=>l.role.includes('小偷')&&!l.isCorrect).length;
+        document.getElementById('win-stats').innerHTML=`⏱️ ${formatTime(secondsElapsed)}  👮 ✅${policeCorrect}❌${policeWrong}  🥷 ✅${thiefCorrect}❌${thiefWrong}`;
+        renderLogToWinOverlay();
+        document.getElementById('pdf-stats-text').innerText=`用时:${formatTime(secondsElapsed)} 答对:${correctCount} 答错:${wrongCount}`;
+        const pdfTbody=document.getElementById('pdf-table-body'); pdfTbody.innerHTML='';
+        answerLog.forEach(log=>{ pdfTbody.innerHTML+=`<tr><td>${log.role}</td><td>${log.question}</td><td>${log.selected}</td><td>${log.correctAnswer}</td><td>${log.isCorrect?'正确':'错误'}</td></tr>`; });
+        document.getElementById('pdf-time').innerText=new Date().toLocaleString();
+        document.getElementById('roll-btn').disabled=true;
+        isMoving=true;
+    }
+    
+    window.downloadPDF=function(){
+        const element=document.getElementById('pdf-export-section');
+        html2canvas(element,{scale:2.5,backgroundColor:'#ffffff'}).then(canvas=>{
+            const imgData=canvas.toDataURL('image/png');
+            const {jsPDF}=window.jspdf;
+            const pdf=new jsPDF({orientation:'landscape',unit:'px',format:[canvas.width*0.75,canvas.height*0.75]});
+            const pdfWidth=pdf.internal.pageSize.getWidth();
+            const pdfHeight=(canvas.height*pdfWidth)/canvas.width;
+            pdf.addImage(imgData,'PNG',0,0,pdfWidth,pdfHeight);
+            pdf.save(`答题记录_${Date.now()}.pdf`);
+            pdfDownloaded=true;
+            isGameEnded=false; // 下载后解除胜利锁定
+            const againBtn=document.getElementById('play-again-btn'), closeBtn=document.getElementById('close-win-btn');
+            againBtn.disabled=false; againBtn.classList.remove('opacity-50','cursor-not-allowed'); againBtn.innerText='再来一局';
+            closeBtn.disabled=false; closeBtn.classList.remove('opacity-50','cursor-not-allowed');
+            closeBtn.onclick=()=>{ if(pdfDownloaded) document.getElementById('win-overlay').style.display='none'; else alert('请先下载PDF'); };
+            msg("PDF已下载，可以重新开始。");
+        }).catch(()=>alert('生成失败'));
+    };
+    
+    window.resetGame=function(){
+        if(gameLocked){ alert("游戏已锁定，请刷新页面"); return; }
+        if(isGameEnded && !pdfDownloaded){ alert('请先下载PDF记录才能重新开始'); return; }
+        pSteps=0; tSteps=16; turn='police'; isMoving=false; frozenTurns={police:0,thief:0}; correctCount=0; wrongCount=0; answerLog=[]; pdfDownloaded=false; isGameEnded=false;
+        updateStatsUI(); resetTimer(); syncPositions();
+        document.getElementById('current-player-name').innerText='警察行动'; document.getElementById('current-player-name').className="text-xl font-black text-blue-600";
+        document.getElementById('turn-card').style.borderBottomColor='#3b82f6';
+        document.getElementById('dice-result-val').innerText="等待投掷...";
+        document.getElementById('roll-btn').disabled=false;
+        document.getElementById('win-overlay').style.display='none';
+        const againBtn=document.getElementById('play-again-btn'), closeBtn=document.getElementById('close-win-btn');
+        againBtn.disabled=true; againBtn.classList.add('opacity-50','cursor-not-allowed'); againBtn.innerText='🔒 先下载PDF';
+        closeBtn.disabled=true; closeBtn.classList.add('opacity-50','cursor-not-allowed');
+        msg("游戏已重置");
+    };
+    
+    // 背景与题库界面
+    window.showBgSettings=function(){ if(!gameLocked) document.getElementById('bg-modal').style.display='flex'; updatePreview(); };
+    window.closeBgSettings=()=>document.getElementById('bg-modal').style.display='none';
+    function updatePreview(){ let url=document.getElementById('bg-url').value; let pre=document.getElementById('bg-preview'); if(url){ pre.style.backgroundImage=`url('${url}')`; pre.style.backgroundSize='cover'; pre.innerHTML=''; } else{ pre.style.backgroundImage='none'; pre.innerHTML='预览区域'; } }
+    document.getElementById('bg-url').addEventListener('input',updatePreview);
+    document.getElementById('bg-upload').addEventListener('change',function(e){ let file=e.target.files[0]; if(file){ let reader=new FileReader(); reader.onload=ev=>{ let pre=document.getElementById('bg-preview'); pre.style.backgroundImage=`url('${ev.target.result}')`; pre.style.backgroundSize='cover'; pre.innerHTML=''; window.tempBg=ev.target.result; }; reader.readAsDataURL(file); } });
+    document.getElementById('apply-bg-btn').onclick=()=>{ let url=document.getElementById('bg-url').value; if(window.tempBg) boardEl.style.backgroundImage=`url('${window.tempBg}')`; else if(url) boardEl.style.backgroundImage=`url('${url}')`; else alert("请上传或输入URL"); boardEl.style.backgroundSize='cover'; closeBgSettings(); };
+    document.getElementById('reset-bg-btn').onclick=()=>{ boardEl.style.backgroundImage=''; boardEl.style.backgroundColor='#cbd5e1'; document.getElementById('bg-url').value=''; document.getElementById('bg-upload').value=''; document.getElementById('bg-preview').style.backgroundImage='none'; document.getElementById('bg-preview').innerHTML='预览区域'; closeBgSettings(); };
+    
+    function renderTable(){ const tbody=document.getElementById('table-body'); tbody.innerHTML=''; for(let i=0;i<PATH_LEN;i++){ const q=questions[i]||{q:"", options:["","","",""], correct:""}; const opts=q.options.length===4?q.options:["","","",""]; const tr=document.createElement('tr'); tr.innerHTML=`<td class="font-bold">${i}</td><td><input class="q-input q-text" value="${(q.q||'').replace(/"/g,'&quot;')}" ${i===0?'disabled':''}></td><td><input class="q-input q-opt0" value="${opts[0]}" ${i===0?'disabled':''}></td><td><input class="q-input q-opt1" value="${opts[1]}" ${i===0?'disabled':''}></td><td><input class="q-input q-opt2" value="${opts[2]}" ${i===0?'disabled':''}></td><td><input class="q-input q-opt3" value="${opts[3]}" ${i===0?'disabled':''}></td><td><input class="q-input q-correct" value="${(q.correct||'').replace(/"/g,'&quot;')}" ${i===0?'disabled':''}></td>`; tbody.appendChild(tr); } }
+    window.openEditor=function(){ if(gameLocked) return; renderTable(); document.getElementById('editor-modal').style.display='flex'; };
+    window.closeEditor=()=>document.getElementById('editor-modal').style.display='none';
+    window.saveFromTable=function(){ const rows=document.querySelectorAll('#table-body tr'); let newQ=[]; for(let i=0;i<rows.length;i++){ if(i===0){ newQ.push({q:"", options:["","","",""], correct:""}); continue; } let q=rows[i].querySelector('.q-text').value.trim(); let opts=[rows[i].querySelector('.q-opt0').value.trim(), rows[i].querySelector('.q-opt1').value.trim(), rows[i].querySelector('.q-opt2').value.trim(), rows[i].querySelector('.q-opt3').value.trim()]; let cor=rows[i].querySelector('.q-correct').value.trim(); if(!q){ alert(`格子${i}题目不能为空`); return; } if(!opts.includes(cor)){ alert(`正确答案不在选项中`); return; } newQ.push({q,options:opts,correct:cor}); } questions=newQ; localStorage.setItem('policeThiefQuestions',JSON.stringify(questions)); msg("题库已保存"); closeEditor(); };
+    window.openImportModal=()=>document.getElementById('import-modal').style.display='flex';
+    window.closeImportModal=()=>document.getElementById('import-modal').style.display='none';
+    window.parseAndImport=function(){ let text=document.getElementById('import-textarea').value; let blocks=text.split(/\n\s*\n/).filter(b=>b.trim()); let imported=[]; for(let block of blocks){ let lines=block.split('\n').map(l=>l.trim()).filter(l=>l); let question='', options=['','','',''], correctLetter=''; for(let line of lines){ if(/^[A-D]\./.test(line)){ let letter=line[0]; let content=line.replace(/^[A-D]\.\s*/,''); let idx=letter.charCodeAt(0)-65; if(idx>=0&&idx<4) options[idx]=content; } else if(line.startsWith('答案：')||line.startsWith('答案:')) correctLetter=line.replace(/^答案[：:]\s*/,'').trim().toUpperCase(); else if(!question && !line.match(/^\d+\./)) question=line.replace(/^\d+\.\s*/,''); } if(!question && lines.length) question=lines[0].replace(/^\d+\.\s*/,''); let correctAnswer=options[correctLetter.charCodeAt(0)-65]||''; if(question && options.some(o=>o) && correctAnswer) imported.push({q:question,options,correct:correctAnswer}); } if(imported.length===0){ alert("无有效题目"); return; } let rows=document.querySelectorAll('#table-body tr'); for(let i=1;i<Math.min(imported.length+1,PATH_LEN);i++){ let row=rows[i]; if(!row) break; let qq=imported[i-1]; row.querySelector('.q-text').value=qq.q; row.querySelector('.q-opt0').value=qq.options[0]||''; row.querySelector('.q-opt1').value=qq.options[1]||''; row.querySelector('.q-opt2').value=qq.options[2]||''; row.querySelector('.q-opt3').value=qq.options[3]||''; row.querySelector('.q-correct').value=qq.correct; } closeImportModal(); alert(`导入 ${Math.min(imported.length,PATH_LEN-1)} 道题`); };
+    
+    window.downloadGame=function(){ if(gameLocked) return; let html=document.documentElement.outerHTML; let blob=new Blob([html],{type:'text/html'}); let a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='警察抓小偷.html'; a.click(); URL.revokeObjectURL(a.href); };
+    window.toggleRules=function(){ document.querySelector('.rule-card').classList.toggle('show'); };
+    window.requestBgAccess=()=>showPasswordModal('bg');
+    window.requestEditorAccess=()=>showPasswordModal('editor');
+    
+    let saved=localStorage.getItem('policeThiefQuestions'); if(saved){ try{ let p=JSON.parse(saved); if(p.length===PATH_LEN) questions=p; }catch(e){} }
+    document.getElementById('roll-btn').onclick = handleRoll;
+    document.getElementById('download-pdf-btn').onclick = window.downloadPDF;
+    document.getElementById('play-again-btn').onclick = window.resetGame;
+    window.onload = ()=>{ initBoard(); resetTimer(); };
+})();
+</script>
+</body>
+</html>
